@@ -1,78 +1,215 @@
-#include <RH_ASK.h>
-#include <SPI.h> // Not actualy used but needed to compile
+#include <avr/eeprom.h>
+#include <VirtualWire.h>
+#include <AESLib.h>
 
-RH_ASK driver(2000, 2, 4, 10); // ESP8266 or ESP32: do not use pin 11 
+const int SAFEWINDOW = 50;
+long lastcount;
+char *controller;
+unsigned char msg[16];
+uint8_t key[] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+#pragma pack 1
+//uint8_t key[16];
+typedef struct {
+    unsigned long serial;
+    long counter;
+    char command;
+    long extra;
+    int code;
+    char termin;
+} PackedData;
+typedef struct {
+    long counter;
+    unsigned long serial;
+    uint8_t skey[16];
+} Settings;
+typedef struct {
+    long counter;
+    unsigned long serial;
+    int magic;
+} PairingData;
+// select the pins used on the LCD panel
 
-
-#include <rfscomm.h>
-
-/***************************************************************************************/
-
-// I/O defines
-#define P_RX       2 // RF Rx digital pin
-//#define P_LED     13 // LED pin
-
-// RF defines
-#define MY_ID   0x1B // Decimal value:  27 - One Byte, range (0-255) | (0x00-0xFF)
-
-/***************************************************************************************/
-
-// RF Object
-RFSCOMM rf(MY_ID);
+Settings StoredSettings;
+int errorcounter=0;
+int adc_key_in;
 
 void setup()
 {
-    Serial.begin(9600);  // Debugging only
-    if (!driver.init())
-         Serial.println("init failed");
+    Serial.begin(9600);
 
-
-    rf.config(NO_USE, P_RX, MAN_1200);
-
-    Serial.print("\nSystem with ID 0x"); Serial.print(MY_ID, HEX); Serial.print(", configured to receive\n");
-    Serial.print("\n-------------------------------------------------------\n");
+    //memcpy (&StoredSettings.skey, &key[0], sizeof(key));
+    //eeprom_write_block((const void*)&StoredSettings, (void*)0, sizeof(StoredSettings));
+    delay(1000);               
+    eeprom_read_block((void*)&StoredSettings, (void*)0, sizeof(StoredSettings));
+    //memcpy (&key[0],&StoredSettings.skey, sizeof(key));
+    Serial.print("EEPROMKEY:");
+    for(int k=0;k<16;k++)
+    Serial.print(StoredSettings.skey[k],HEX);
+    Serial.println("");
+    Serial.print(StoredSettings.counter); // print a simple message
+    Serial.print("SN: "); // print a simple message
+    Serial.print(StoredSettings.serial);
+    pinMode(2, OUTPUT);
+    vw_set_ptt_inverted(true); // Required for DR3100
+    vw_set_rx_pin(A5);
+    vw_setup(4000); // Bits per sec
+    vw_rx_start();
 }
-
+void pairing(void)
+{
+    uint8_t buf[VW_MAX_MESSAGE_LEN];
+    uint8_t buflen = VW_MAX_MESSAGE_LEN;
+    lcd.setCursor(0,0);
+    lcd.print(" Pairing! "); 
+    long start =millis();
+    int ledState = LOW;
+    long previousMillis = 0; // will store last time LED was updated
+    do{
+        //do pairing process and store serial and counter
+        if (vw_get_message(buf, &buflen)) // Non-blocking
+        {
+        lcd.clear();
+      
+        PairingData * pairData = (PairingData *)buf; 
+           
+            if(pairData->magic==555){
+                lcd.clear();
+                lcd.setCursor(0,0);
+                lcd.print(pairData->serial);
+                lcd.setCursor(0,1);
+                lcd.print(pairData->counter);
+                StoredSettings.counter=pairData->counter;
+                StoredSettings.serial=pairData->serial;
+                eeprom_write_block((const void*)&StoredSettings, (void*)0, sizeof(StoredSettings));
+                delay(2000);
+                lcd.clear();              
+                lcd.setCursor(0,0);
+                lcd.print(" Done!");
+                lcd.setCursor(0,1);
+                lcd.print(" Synced");
+                delay(2000);
+                break;
+            }
+            else
+            {
+                lcd.clear();            
+                lcd.setCursor(0,0);
+                lcd.print(" Error!");
+                lcd.setCursor(0,1);
+                lcd.print("Try again!");
+            }
+        }
+        delay(100);
+        //end of pairing
+        unsigned long currentMillis = millis();
+        if(currentMillis - previousMillis > 100) {
+            previousMillis = currentMillis;
+            if (ledState == LOW)
+            ledState = HIGH;
+            else
+            ledState = LOW;
+            digitalWrite(2, ledState);
+        }
+    } while ((millis()-start)<10000); //for 5 seconds
+}
 void loop()
 {
-    uint8_t src_id, dev_id, data_length;
-    uint8_t* data;
-//    uint8_t buf[RH_ASK_MAX_MESSAGE_LEN];
-//    uint8_t buflen = sizeof(buf);
 
-//    if (driver.recv(buf, &buflen)) // Non-blocking
-//    {
-//       int i;
-//       String str = "";
-//       for (int i = 0; i < buflen; i++) {
-//            str += (char)buf[i];
-//        }
-//       
-//        Serial.println(str);
-//    }
 
-        // If any packet received
-    if(rf.receive())
+   if (read_LCD_buttons()!=0)
     {
-        // Get the packet content
-        src_id = rf.rx_src_id();
-        dev_id = rf.rx_dev_id();
-        data_length = rf.rx_data_length();
-        data = rf.rx_data();
-
-        // Notify and show packet content
-        Serial.print("\nPackage received:\n");
-        Serial.print("[From device with ID: 0x"); Serial.print(src_id, HEX); Serial.print(" | ");
-        Serial.print("To device with ID: 0x"); Serial.print(dev_id, HEX); Serial.print(" | ");
-        Serial.print("Data ("); Serial.print(data_length); Serial.print(" bytes): ");
-        Serial.print((const char*)data); Serial.print("]\n\n");
-
-        // Check if the packet is for me
-        if(dev_id == MY_ID)
-        {
-            Serial.print("Expected data from device [0x"); Serial.print(src_id, HEX); Serial.print("] has been received.\n");
-            Serial.print("Data received: "); Serial.print((const char*)data); Serial.println();
-            Serial.print("\n-------------------------------------------------------\n");
-        }
+   pairing();
     }
+    uint8_t buf[VW_MAX_MESSAGE_LEN];
+    uint8_t buflen = VW_MAX_MESSAGE_LEN;
+    if (vw_get_message(buf, &buflen)) // Non-blocking
+    {
+        Serial.print("Encrypted:");
+        memcpy(msg, buf, buflen);
+        for(int k=0;k<16;k++)
+        Serial.print(msg[k],HEX);
+        Serial.println("");
+        Serial.print("KEY:");
+        for(int k=0;k<buflen;k++)
+        Serial.print(key[k],HEX);
+        Serial.println("");
+        aes128_dec_single(key, msg);
+        PackedData * sdData = (PackedData *)msg;
+        Serial.print("Test Decrypt:");
+        Serial.print(sdData->serial);
+        Serial.println("");
+        
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print(sdData->serial);
+        lcd.setCursor(0,1);
+        lcd.print(sdData->counter);
+        
+        digitalWrite(2,1); //for red led
+        long currentcounter;
+        if(sdData->code==555){
+            lcd.clear();
+            lcd.setCursor(0,0);
+            lcd.print(sdData->serial);
+            lcd.setCursor(0,1);
+            lcd.print(sdData->counter);
+            //do the job if the counter is with in safety window
+            currentcounter= sdData->counter;
+            if((currentcounter-StoredSettings.counter)<SAFEWINDOW && (currentcounter-StoredSettings.counter)>0)
+            {
+                lcd.setCursor(0,0);
+                lcd.print("Access Granted!");
+                StoredSettings.counter=sdData->counter;
+                eeprom_write_block((const void*)&StoredSettings, (void*)0, sizeof(StoredSettings));
+                //do the stuff here for eg running the servo or door lock motor
+                char command = sdData->command;
+                switch (command) {
+                        case 'a':
+                              lcd.clear();
+                              lcd.setCursor(0,0);
+                              lcd.print("OPENING DOOR"); 
+                              //do the servo here                              
+                              break;
+                        case 'b':
+                              lcd.clear();
+                              lcd.setCursor(0,0);
+                              lcd.print("CLOSING DOOR"); 
+                              //do the servo here     
+                              break;
+                        case 'c':
+                              lcd.clear();
+                              lcd.setCursor(0,0);
+                              lcd.print("NEXT THING"); 
+                              //do the servo here     
+                              break;                }
+                
+            }
+          else
+            {
+                errorcounter++;
+                lcd.clear();
+                lcd.setCursor(0,0);
+                lcd.print("Needs Pairing!");
+                lcd.setCursor(8,1);
+                lcd.print(errorcounter);
+                lcd.setCursor(12,1);
+                lcd.print(StoredSettings.counter);
+                lcd.setCursor(0,1);
+                lcd.print(currentcounter);               
+            } 
+        }
+        else
+        {
+            lcd.clear();
+            lcd.setCursor(0,0);
+            lcd.setCursor(0,0);
+            lcd.print(" Error!");
+            lcd.setCursor(0,1);
+            lcd.print(" Wrong Key??");
+        }
+        delay(100);
+        digitalWrite(2,0);
+    }
+    delay(100); //just here to slow down a bit
+
 }
