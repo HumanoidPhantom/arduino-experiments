@@ -40,6 +40,7 @@ byte cbc_iv[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0
 SHA256 sha256;
 CBC<AES256> cbcaes256;
 char *aes_key = (char *)"this is test";
+int counter = 0;
 
 void setup()
 {
@@ -78,15 +79,35 @@ void recvWithEndMarker() {
 //        msg[i] = '\0';
 //        showNewData(msg);
 //  }
-  char *msg = (char *) "Nice to meet you Nice to meet you Nice to meet you Nice to meet you Nice to meet youNice to meet you";
-  showNewData(msg);
+  char charCounter[16];
+  counter +=1;
+  itoa(counter, charCounter, 10);
+  const char *msg = (const char *) "Nice to meet you Nice to meet you Nice to meet you Nice to meet you Nice to meet youNice to meet you";
+  char newMsg[strlen(msg) + strlen(charCounter)];
+  
+  size_t msg_len = getMsg(msg, charCounter, newMsg, strlen(msg), strlen(charCounter));
+  showNewData(newMsg, msg_len);
   delay(1000);
 }
 
-void showNewData(char *msg) {
+size_t getMsg(const char * msg, char * charCounter, char * newMsg, size_t msg_len, size_t counter_len) {        
+    for (int i = 0; i < counter_len; i++) {
+        newMsg[i] = charCounter[i];
+      }
+    
+    for (int i = 0; i < msg_len; i++) {
+        newMsg[counter_len + i] = msg[i];
+      }
+
+    newMsg[msg_len + counter_len - 1] = '\0';
+    return msg_len + counter_len;
+}
+
+
+void showNewData(char *msg, size_t msg_len) {
      Serial.print("You sent message: ");
      Serial.println(msg);
-     encryptMsg(msg, strlen(msg));
+     encryptMsg(msg, msg_len);
      showHelpMessage = true;
   }
 
