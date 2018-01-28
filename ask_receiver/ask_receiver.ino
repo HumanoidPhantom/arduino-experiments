@@ -10,8 +10,7 @@
 RH_ASK driver(2000, 2, 8, 10); // ESP8266 or ESP32: do not use pin 11
 #define HASH_SIZE 32
 
-#define MAX_PLAINTEXT_SIZE 64
-#define MAX_CIHPERTEXT_SIZE 64
+#define MAX_PLAINTEXT_SIZE 128
 
 byte cbc_iv[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
 
@@ -52,7 +51,7 @@ void loop()
 }
 
 void msgReceiver() {
-    uint8_t buf[RH_ASK_MAX_MESSAGE_LEN];
+    uint8_t buf[MAX_PLAINTEXT_SIZE];
     uint8_t buflen = sizeof(buf);
 
     if (driver.recv(buf, &buflen)) // Non-blocking

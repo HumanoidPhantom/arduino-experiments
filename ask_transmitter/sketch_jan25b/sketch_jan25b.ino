@@ -1,11 +1,3 @@
-#include <blockcipher_descriptor.h>
-#include <debug.h>
-#include <hashfunction_descriptor.h>
-#include <keysize_descriptor.h>
-#include <sha3-api.h>
-#include <stack_measuring.h>
-#include <streamcipher_descriptor.h>
-#include <string-extras.h>
 #include <AES.h>
 #include <CBC.h>
 #include <Crypto.h>
@@ -22,8 +14,7 @@ RH_ASK driver(2000, 9, 2, 10); // ESP8266 or ESP32: do not use pin 11
 const int firstButtonPin = 4;     // the number of the pushbutton pin
 const int secondButtonPin = 5;
 
-#define MAX_PLAINTEXT_SIZE 64
-#define MAX_CIHPERTEXT_SIZE 64
+#define MAX_PLAINTEXT_SIZE 128
 
 //const int ledPin =  13;
 int firstButtonPushCounter = 0;   // counter for the number of button presses
@@ -82,27 +73,15 @@ void recvWithEndMarker() {
   char charCounter[16];
   counter +=1;
   itoa(counter, charCounter, 10);
-  const char *msg = (const char *) "Nice to meet you Nice to meet you Nice to meet you Nice to meet you Nice to meet youNice to meet you";
-  char newMsg[strlen(msg) + strlen(charCounter)];
+  const char *msg = (const char *) "Nice to meet youNice to meet";
   
-  size_t msg_len = getMsg(msg, charCounter, newMsg, strlen(msg), strlen(charCounter));
+  size_t msg_len = strlen(msg) + strlen(charCounter);
+  char newMsg[strlen(msg) + strlen(charCounter)];
+
+  sprintf(newMsg, "%s%s", charCounter, msg);
   showNewData(newMsg, msg_len);
   delay(1000);
 }
-
-size_t getMsg(const char * msg, char * charCounter, char * newMsg, size_t msg_len, size_t counter_len) {        
-    for (int i = 0; i < counter_len; i++) {
-        newMsg[i] = charCounter[i];
-      }
-    
-    for (int i = 0; i < msg_len; i++) {
-        newMsg[counter_len + i] = msg[i];
-      }
-
-    newMsg[msg_len + counter_len - 1] = '\0';
-    return msg_len + counter_len;
-}
-
 
 void showNewData(char *msg, size_t msg_len) {
      Serial.print("You sent message: ");
