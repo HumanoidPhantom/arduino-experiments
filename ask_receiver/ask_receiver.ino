@@ -10,7 +10,7 @@
 RH_ASK driver(2000, 2, 8, 10); // ESP8266 or ESP32: do not use pin 11
 #define HASH_SIZE 32
 
-#define MAX_PLAINTEXT_SIZE 128
+#define MAX_PLAINTEXT_SIZE 32
 
 byte cbc_iv[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
 
@@ -29,9 +29,14 @@ int lastSecondButtonState = 0;     // previous state of the button
 SHA256 sha256;
 CBC<AES256> cbcaes256;
 
-String prev_msg = "";
+String rem_msg = "";
 String cur_msg = "";
-char *aes_key = (char *)"this is test";
+int aes_key[MAX_PLAINTEXT_SIZE];
+int key_index = 0;
+int counter = 0;
+
+boolean showHelpMessage = false;
+boolean waitForPassword = false;
 
 void setup()
 {
@@ -45,13 +50,17 @@ void setup()
 
 void loop()
 {
-    msgReceiver();
-    decryptMsg();
-    buttonsHandler();
+  msgReceiver();
+  decryptMsg();
+  buttonsHandler();
+}
+
+void helpMessage() {
+    Serial.println("Enter your password (push both buttons to start input)");
 }
 
 void msgReceiver() {
-    uint8_t buf[MAX_PLAINTEXT_SIZE];
+    uint8_t buf[128];
     uint8_t buflen = sizeof(buf);
 
     if (driver.recv(buf, &buflen)) // Non-blocking
@@ -61,45 +70,39 @@ void msgReceiver() {
        for (int i = 0; i < buflen; i++) {
             str += (char)buf[i];
         }
-       prev_msg = cur_msg;
        cur_msg = str;
        Serial.println("New message arrived");
+       if (!waitForPassword) {
+          helpMessage();
+        }
     }
   }
 
 void decryptMsg() {
       Hash *hash = &sha256;
-      const char *key = (const char *) aes_key;
-      size_t k_size = strlen(key);  
+      
+      char key[key_index];
+      for (int i = 0; i < key_index; i++) {
+        key[i] = aes_key[i];
+      }
+      
+      size_t k_size = sizeof(key);  
       uint8_t hashKey[HASH_SIZE];
       hash->reset();
       hash->update(key + 0, k_size);
       hash->finalize(hashKey, sizeof(hashKey));
       
-      if (prev_msg.length() > 0) {
-          Serial.println("got here 1");
-          char tmpMsg[prev_msg.length()];
+      if (rem_msg.length() > 0) {
+          char tmpMsg[rem_msg.length()];
 
-          for (int i = 0; i < prev_msg.length(); i++) {
-              tmpMsg[i] = prev_msg[i];
+          for (int i = 0; i < rem_msg.length(); i++) {
+              tmpMsg[i] = rem_msg[i];
             }
         
-          decCBCMode((const char *)tmpMsg, prev_msg.length(), hashKey, sizeof(hashKey));
-          prev_msg = "";
-        }
-
-      if (cur_msg.length() > 0) {
-        Serial.print("got here 2, "); Serial.println(cur_msg.length());
-          char tmpMsg[cur_msg.length()];
-
-          for (int i = 0; i < cur_msg.length(); i++) {
-              tmpMsg[i] = cur_msg[i];
-            }
-        
-        decCBCMode((const char *)tmpMsg, cur_msg.length(), hashKey, sizeof(hashKey));
-        cur_msg = "";
-      }
-      
+          decCBCMode((const char *)tmpMsg, rem_msg.length(), hashKey, sizeof(hashKey));
+          rem_msg = "";
+          waitForPassword = false;
+        }      
   }
 
 void decCBCMode(const char *msg, size_t msg_len, byte *hashKey, size_t hashKeySize) {
@@ -138,14 +141,10 @@ void decCBCMode(const char *msg, size_t msg_len, byte *hashKey, size_t hashKeySi
       }
       Serial.println("Decrypted msg: ");
       Serial.println(res_msg);
-      Serial.println("done");
-
-      delay(1000);
-
   }
 
 void buttonsHandler() {
-  firstButtonState = digitalRead(firstButtonPin);
+    firstButtonState = digitalRead(firstButtonPin);
     secondButtonState = digitalRead(secondButtonPin);
 
     if (firstButtonState != lastFirstButtonState) {
@@ -153,12 +152,23 @@ void buttonsHandler() {
       if (firstButtonState == HIGH) {
         // if the current state is HIGH then the button went from off to on:
         firstButtonPushCounter++;
-        Serial.println("on");
-        Serial.print("number of button pushes: ");
-        Serial.println(firstButtonPushCounter);
       } else {
-        // if the current state is LOW then the button went from on to off:
-        Serial.println("off");
+         if (secondButtonState == HIGH) {
+            if (waitForPassword) {
+              decryptMsg();
+            } else {
+              if (cur_msg.length()) {
+                rem_msg = cur_msg;
+                cur_msg = "";
+                waitForPassword = true; 
+              }
+            }
+          } else {
+            if (key_index < MAX_PLAINTEXT_SIZE && waitForPassword) { 
+              aes_key[key_index] = firstButtonPin;
+              key_index += 1;
+            }
+          }
       }
       // Delay a little bit to avoid bouncing
       delay(50);
@@ -171,12 +181,23 @@ void buttonsHandler() {
       if (secondButtonState == HIGH) {
         // if the current state is HIGH then the button went from off to on:
         secondButtonPushCounter++;
-        Serial.println("second button on");
-        Serial.print("number of second button pushes: ");
-        Serial.println(secondButtonPushCounter);
       } else {
-        // if the current state is LOW then the button went from on to off:
-        Serial.println("second buttton off");
+          if (firstButtonState == HIGH) {
+            if (waitForPassword) {
+              decryptMsg();
+            } else {
+              if (cur_msg.length()) {
+                rem_msg = cur_msg;
+                cur_msg = "";
+                waitForPassword = true; 
+              }
+            }
+          } else {
+            if (waitForPassword && key_index < MAX_PLAINTEXT_SIZE) { 
+              aes_key[key_index] = secondButtonPin;
+              key_index += 1;
+            }
+          }
       }
       // Delay a little bit to avoid bouncing
       delay(50);
