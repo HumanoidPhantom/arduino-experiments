@@ -78,7 +78,7 @@ void recvWithEndMarker() {
 //        msg[i] = '\0';
 //        showNewData(msg);
 //  }
-  char *msg = (char *) "Nice to meet you";
+  char *msg = (char *) "Nice to meet you Nice to meet you Nice to meet you Nice to meet you Nice to meet youNice to meet you";
   showNewData(msg);
   delay(1000);
 }
