@@ -163,12 +163,14 @@ void buttonsHandler() {
         firstButtonPushCounter++;
       } else {
          if (secondButtonState == HIGH) {
+          Serial.println(firstButtonPin);
             if (!alreadyDone) {
               alreadyDone = true;
               // both buttons are pressed
               if (waitForPassword) {
                 decryptMsg();
               } else {
+                cur_msg = "hello";
                 if (cur_msg.length()) {
                   rem_msg = cur_msg;
                   cur_msg = "";
@@ -186,10 +188,10 @@ void buttonsHandler() {
             }
           } else {
             // only one is pressed
-            if (waitForPassword) { 
-              if (alreadyDone) {
-                alreadyDone = false;
-              } else {
+            if (alreadyDone) {
+              alreadyDone = false;
+            } else {
+              if (waitForPassword) { 
                 if (key_index < MAX_PLAINTEXT_SIZE) { 
                   aes_key[key_index] = firstButtonPin;
                   key_index += 1;
@@ -211,12 +213,14 @@ void buttonsHandler() {
         secondButtonPushCounter++;
       } else {
           if (firstButtonState == HIGH) {
+            Serial.println(secondButtonPin);
             if (!alreadyDone) { 
               alreadyDone = true;
             // both buttons are pressed
               if (waitForPassword) {
                 decryptMsg();
               } else {
+                cur_msg = "hello";
                 if (cur_msg.length()) {
                   Serial.println("One message available. Enter your password");  
                   Serial.println("(push both buttons to confirm the password and decrypt)");
@@ -231,11 +235,11 @@ void buttonsHandler() {
               }
             }
           } else {
-            if (waitForPassword) { 
+            if (alreadyDone) {
+              alreadyDone = false;
+            } else {
+              if (waitForPassword) { 
               // only one is pressed
-              if (alreadyDone) {
-                alreadyDone = false;
-              } else {
                 if (key_index < MAX_PLAINTEXT_SIZE) { 
                   aes_key[key_index] = secondButtonPin;
                   key_index += 1;
