@@ -27,6 +27,7 @@ int lastSecondButtonState = 0;     // previous state of the button
 
 boolean showHelpMessage = true;
 boolean waitForPassword = false;
+
 byte cbc_iv[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f};
 
 SHA256 sha256;
@@ -185,15 +186,15 @@ void buttonsHandler() {
       } else {
         // if the current state is LOW then the button went from on to off:
         if (waitForPassword) {
-             if (secondButtonState == HIGH) {
-              encryptAndSend();
-            } else {
-              if (key_index < MAX_PLAINTEXT_SIZE) { 
-                aes_key[key_index] = firstButtonPin;
-                key_index += 1;  
-              }
+           if (secondButtonState == HIGH) {
+            encryptAndSend();
+          } else {
+            if (key_index < MAX_PLAINTEXT_SIZE) { 
+              aes_key[key_index] = firstButtonPin;
+              key_index += 1;  
             }
-          }      
+          }
+        }
       }
       // Delay a little bit to avoid bouncing
       delay(50);
@@ -212,12 +213,12 @@ void buttonsHandler() {
             if (firstButtonState == HIGH) {
               encryptAndSend();
             } else {
-              if (key_index < MAX_PLAINTEXT_SIZE) { 
+                if (key_index < MAX_PLAINTEXT_SIZE) { 
                 aes_key[key_index] = secondButtonPin;
                 key_index += 1;
-              }
             }
           }
+        }
       }
       // Delay a little bit to avoid bouncing
       delay(50);
